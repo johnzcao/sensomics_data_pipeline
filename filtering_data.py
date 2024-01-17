@@ -2,7 +2,7 @@ def main():
     # Help message:
     help_msg ='''This script filters values in input files to remove noise.
 
-    Usage: python 04_filtering.py -f/-d <input_files/directory> -s save_name [options]
+    Usage: python filtering_data.py -f/-d <input_files/directory> -s save_name [options]
 
     Arguments:
         -f: input file, .xlsx or .csv
