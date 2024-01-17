@@ -9,7 +9,7 @@ def main():
     # Help message:
     help_msg ='''This script reformats the accelerome records and calculate acceleration from the 3 recorded components.
 
-    Usage: python 02_acc_reformat.py -f <filename> [options]
+    Usage: python acc_reformat.py -f <filename> [options]
 
     Arguments:
         -f: .csv file containing accelerometer data from raw files
