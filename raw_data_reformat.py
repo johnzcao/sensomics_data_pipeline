@@ -188,7 +188,7 @@ def to_minutes(t):
 help_msg ='''This script processes all .json files and convert them into .csv files for faster access in later steps.
 Accelerations, ppg, and all other measurements will be split into 3 sepearate files. 
     
-Usage: python 01_data_reformat.py -d <dirname> [options]
+Usage: python raw_data_reformat.py -d <dirname> [options]
     
 Arguments:
     -d: directory containing all .json files
