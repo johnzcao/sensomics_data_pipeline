@@ -63,7 +63,7 @@ def sort_files(file_list,name_stem):
 def main():
     help_msg ='''This script unzip and sort all raw data to folders organized by date. 
         
-    Usage: python 01_organize_raw_files.py -d <dirname> -o <output_name_stem> [options]
+    Usage: python organize_raw_files.py -d <dirname> -o <output_name_stem> [options]
         
     Arguments:
         -d: directory containing all files to process
