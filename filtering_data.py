@@ -1,144 +1,3 @@
-def main():
-    # Help message:
-    help_msg ='''This script filters values in input files to remove noise.
-
-    Usage: python filtering_data.py -f/-d <input_files/directory> -s save_name [options]
-
-    Arguments:
-        -f: input file, .xlsx or .csv
-        -d: directory containing multiple data files, reads all .xlsx files by default (use -p to modify search pattern)
-        -s: save file name (.csv) or directory name. Name ending in anything other than ".csv" will be treated as a directory name
-
-    Options:
-        -h or --help: print help document
-        -c: combine results into one file when saving, works with -d and -s option
-        -p: search pattern for -d (default '*.xlsx')
-            If pattern include wild card characters (* or ?), use quotation marks around the pattern
-        -v: verbose mode
-    '''
-    # read arguments from command line and parse options
-    arg_list = sys.argv[1:]
-    short_opts = 'cf:d:p:s:hv'
-    long_opts = ['help']
-    global verbose
-    verbose = False
-    try:
-        opt_list = getopt.getopt(arg_list, short_opts, long_opts)[0]
-    except getopt.error as err:
-        print(str(err))
-        sys.exit(2)
-    
-    if (('--help','') in opt_list) or (('-h','') in opt_list) or len(arg_list) == 0:
-        print(help_msg)
-        sys.exit(0)
-    
-    if ('-v','') in opt_list:
-        verbose = True
-            
-    # check that one of -d or -f is used in arguments
-    if ('-d' in arg_list) and ('-f' in arg_list):
-        sys.exit('Error: -d and -f cannot be used together.')
-    elif (not '-d' in arg_list) and (not '-f' in arg_list):
-        sys.exit('Error: Require either -d or -f.')
-    
-    # initialize variables and process arguments
-    dir_name,file_list,file_type,save_file = '','','',''
-    combine_file,save_dir = False, False
-    search_pattern = '*.xlsx'
-    for current_arg, current_val in opt_list:
-        if current_arg == '-f':
-            file_name,file_type = validate_file(current_val, ['.xlsx','.csv'])
-            file_list = [file_name]
-        elif current_arg == '-d':
-            dir_name = validate_file(current_val)
-        elif current_arg == '-p':
-            search_pattern = current_val
-            msg(f'Search pattern changed to "{search_pattern}"')
-        elif current_arg == '-c':
-            combine_file = True
-        elif current_arg == '-s':
-            save_file = current_val
-            if not save_file.endswith('.csv'):
-                msg(f'Saving files to directory {save_file}')
-                if not os.path.exists(save_file):
-                    try:
-                        os.mkdir(save_file)
-                    except FileNotFoundError as error:
-                        print(f'Cannot create directory "{save_file}", invalid path.')
-                        sys.exit(error)
-                save_dir = True
-            else:
-                if not os.path.exists(save_file):
-                    try:
-                        pd.DataFrame().to_csv(save_file)
-                        os.remove(save_file)
-                    except FileNotFoundError as error:
-                        print(f'Invalid output directory or file name: "{save_file}"')
-                        sys.exit(error)
-    
-    if ('-d' not in arg_list) and ('-c' in arg_list):
-        msg('Warning: -c option used without -d, ignored.')
-        combine_file = False
-    
-    if save_file == '':
-        print('Output file name or directory not provided (-s)')
-        sys.exit()
-    
-    if dir_name != '':
-        file_list = search_files(dir_name,search_pattern)
-    if len(file_list) == 0:
-        sys.exit(f'Error: No file with pattern "{search_pattern}" found within {dir_name}.' )
-
-    # load data
-    # detect file type
-    if file_type == '':
-        file_type = Path(file_list[0]).suffix
-        # check if there's more than one file format
-        for f in file_list:
-            if file_type != Path(f).suffix:
-                sys.exit(f'Error: With the current search pattern ({search_pattern}), there are more than one type of file in the input list ({file_type} and {Path(f).suffix}).')
-        msg(f'Loading file type: {file_type}')
-
-    hr_min = 50
-    bp_dia_min, bp_sys_min = 60, 80
-    spo2_min = 80
-    st_min = 30
-
-    if combine_file == True:
-        msg('-c option used, combining all files in file list in output')
-        # load computed data
-        computed_df = load_file(file_list,file_type)
-        # extract hr to detect abnormal measurements
-        hr_df = computed_df[computed_df['kind']=='hr'].copy()
-        t1 = t_incl(hr_df)
-        computed_df_filt = df_filter(computed_df,t1)
-        computed_df_filt = subset_df(computed_df_filt, 'hr', min_val=hr_min,replace=True)
-        computed_df_filt = subset_df(computed_df_filt, 'bp_dia', min_val=bp_dia_min,replace=True)
-        computed_df_filt = subset_df(computed_df_filt, 'bp_sys', min_val=bp_sys_min,replace=True)
-        computed_df_filt = subset_df(computed_df_filt, 'spo2', min_val=spo2_min,replace=True)
-        computed_df_filt = subset_df(computed_df_filt, 'st', min_val=st_min,replace=True)
-        computed_df_filt.sort_values(by=['kind','date_time'],inplace=True)
-        save_df(computed_df_filt, file_name, save_file, save_dir)
-    else: 
-        for f in file_list:
-            computed_df = load_file([f],file_type)
-            hr_df = computed_df[computed_df['kind']=='hr'].copy()
-            t1 = t_incl(hr_df)
-            computed_df_filt = df_filter(computed_df,t1)
-            msg(f'filtering minimal hr value: {hr_min}. Pre-filter df length: {len(computed_df_filt)}')
-            computed_df_filt = subset_df(computed_df_filt, 'hr', min_val=hr_min,replace=True)
-            msg(f'filtering minimal bp_dia value: {bp_dia_min}. Pre-filter df length: {len(computed_df_filt)}')
-            computed_df_filt = subset_df(computed_df_filt, 'bp_dia', min_val=bp_dia_min,replace=True)
-            msg(f'filtering minimal bp_sys value: {bp_sys_min}. Pre-filter df length: {len(computed_df_filt)}')
-            computed_df_filt = subset_df(computed_df_filt, 'bp_sys', min_val=bp_sys_min,replace=True)
-            msg(f'filtering minimal spo2 value: {spo2_min}. Pre-filter df length: {len(computed_df_filt)}')
-            computed_df_filt = subset_df(computed_df_filt, 'spo2', min_val=spo2_min,replace=True)
-            msg(f'filtering minimal st value: {st_min}. Pre-filter df length: {len(computed_df_filt)}')
-            computed_df_filt = subset_df(computed_df_filt, 'st', min_val=st_min,replace=True)
-            msg(f'Filtered df length: {len(computed_df_filt)}')
-            computed_df_filt.sort_values(by=['kind','date_time'],inplace=True)
-            save_df(computed_df_filt, f, save_file, save_dir)
-
 # verbose function for printing messages
 def msg(text):
     global verbose
@@ -151,18 +10,6 @@ def search_files(dirname,pattern):
     search_str = os.path.abspath(dirname) + '/**/*' + pattern
     file_list = glob.glob(search_str,recursive=True)
     return(sorted(file_list))
-
-def validate_file(file_path,accepted_formats=''): 
-    if Path(file_path).exists():
-        if (accepted_formats != '') and (Path(file_path).suffix in accepted_formats):
-            return([file_path,Path(file_path).suffix])
-        elif (accepted_formats != '') and (Path(file_path).suffix not in accepted_formats): 
-            print(f'Invalid file format: {Path(file_path).parts[-1]}{os.linesep}Must be {" or ".join(accepted_formats)} file.')
-            sys.exit(2)
-        else:
-            return(file_path)
-    else:
-        sys.exit(f'Error: "{file_path}" does not exist!')
 
 # data loading functions
 def load_excel(file_name):
@@ -276,16 +123,103 @@ def df_filter(df,t_intervals):
     msg(f'Done. Total rows in filtered dataframe: {len(new_df)}')
     return(new_df)
 
-def save_df(df, in_name, out_name, is_dir):
-    if out_name is not None:
-        if is_dir == True:
-            out_name = str(Path(out_name) / (Path(in_name).stem + '.csv'))
-        df.to_csv(out_name, index=False)
-        print(f'Data filtering completed. Output file saved as {out_name}.')
-    else:
-        print(df)
-    return()
+def main():
+    # Help message:
+    help_msg ='''This script filters values in input files to remove noise.
+
+    Usage: python filtering_data.py -f/-d <input_files/directory> -s save_name [options]
+
+    Arguments:
+        -f: input file, .xlsx or .csv
+        -d: directory containing multiple data files, reads all .xlsx files by default (use -p to modify search pattern)
+        -s: save file name (.csv)
+
+    Options:
+        -h or --help: print help document
+        -p: search pattern for -d (default '*.xlsx')
+            If pattern include wild card characters (* or ?), use quotation marks around the pattern
+        -v: verbose mode
+    '''
+    # read arguments from command line and parse options
+    arg_list = sys.argv[1:]
+    short_opts = 'f:d:p:s:hv'
+    long_opts = ['help']
+    global verbose
+    verbose = False
+    try:
+        opt_list = getopt.getopt(arg_list, short_opts, long_opts)[0]
+    except getopt.error as err:
+        print(str(err))
+        sys.exit(2)
     
+    if (('--help','') in opt_list) or (('-h','') in opt_list) or len(arg_list) == 0:
+        print(help_msg)
+        sys.exit(0)
+    
+    if ('-v','') in opt_list:
+        verbose = True
+            
+    # check that one of -d or -f is used in arguments
+    if ('-d' in arg_list) and ('-f' in arg_list):
+        sys.exit('Error: -d and -f cannot be used together.')
+    elif (not '-d' in arg_list) and (not '-f' in arg_list):
+        sys.exit('Error: Require either -d or -f.')
+    
+    # initialize variables and process arguments
+    dir_name,file_list,file_type,save_file = '','','',''
+    search_pattern = '*.xlsx'
+    for current_arg, current_val in opt_list:
+        if current_arg == '-f':
+            file_name = current_val
+            file_list = [file_name]
+        elif current_arg == '-d':
+            dir_name = current_val
+        elif current_arg == '-p':
+            search_pattern = current_val
+            msg(f'Search pattern changed to "{search_pattern}"')
+        elif current_arg == '-s':
+            save_file = current_val
+    
+    if save_file == '':
+        print('Output file name or directory not provided (-s)')
+        sys.exit()
+    
+    if dir_name != '':
+        file_list = search_files(dir_name,search_pattern)
+    if len(file_list) == 0:
+        sys.exit(f'Error: No file with pattern "{search_pattern}" found within {dir_name}.' )
+
+    # load data
+    # detect file type
+    if file_type == '':
+        file_type = Path(file_list[0]).suffix
+        # check if there's more than one file format
+        for f in file_list:
+            if file_type != Path(f).suffix:
+                sys.exit(f'Error: With the current search pattern ({search_pattern}), there are more than one type of file in the input list ({file_type} and {Path(f).suffix}).')
+        msg(f'Loading file type: {file_type}')
+
+    hr_min = 50
+    bp_dia_min, bp_sys_min = 60, 80
+    spo2_min = 80
+    st_min = 30
+
+
+    # load computed data
+    computed_df = load_file(file_list,file_type)
+    # extract hr to detect abnormal measurements
+    hr_df = computed_df[computed_df['kind']=='hr'].copy()
+    t1 = t_incl(hr_df)
+    computed_df_filt = df_filter(computed_df,t1)
+    computed_df_filt = subset_df(computed_df_filt, 'hr', min_val=hr_min,replace=True)
+    computed_df_filt = subset_df(computed_df_filt, 'bp_dia', min_val=bp_dia_min,replace=True)
+    computed_df_filt = subset_df(computed_df_filt, 'bp_sys', min_val=bp_sys_min,replace=True)
+    computed_df_filt = subset_df(computed_df_filt, 'spo2', min_val=spo2_min,replace=True)
+    computed_df_filt = subset_df(computed_df_filt, 'st', min_val=st_min,replace=True)
+    computed_df_filt.sort_values(by=['kind','date_time'],inplace=True)
+    computed_df_filt.to_csv(save_file,index = False)
+    return
+
 if __name__ == '__main__':
     import glob, os, getopt, sys
     import pandas as pd
